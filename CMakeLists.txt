@@ -45,7 +45,8 @@ set(TRITON_MIN_CXX_STANDARD 17 CACHE STRING "The minimum C++ standard which feat
 #     PyTorch to base the build off.
 #
 
-option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
+option(TRITON_ENABLE_GPU "Enable GPU support in backend" OFF)
+option(TRITON_ENABLE_ROCM "Enable AMD GPU support in backend" ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
 option(TRITON_ENABLE_NVTX "Include nvtx markers collection in backend." OFF)
 option(TRITON_PYTORCH_ENABLE_TORCHTRT "Enable TorchTRT support" OFF)
@@ -106,20 +107,50 @@ FetchContent_Declare(
   GIT_TAG ${TRITON_CORE_REPO_TAG}
   GIT_SHALLOW ON
 )
-FetchContent_Declare(
-  repo-backend
-  GIT_REPOSITORY ${TRITON_REPO_ORGANIZATION}/backend.git
-  GIT_TAG ${TRITON_BACKEND_REPO_TAG}
-  GIT_SHALLOW ON
-)
+if (${TRITON_ENABLE_ROCM})
+  FetchContent_Declare(
+    repo-backend
+    GIT_REPOSITORY https://github.com/AMD-AI/tritonserver_backend.git
+    GIT_TAG rocm_dev 
+    GIT_SHALLOW ON
+  )
+else()
+  FetchContent_Declare(
+    repo-backend
+    GIT_REPOSITORY ${TRITON_REPO_ORGANIZATION}/backend.git
+    GIT_TAG ${TRITON_BACKEND_REPO_TAG}
+    GIT_SHALLOW ON
+  )
+endif() 
 FetchContent_MakeAvailable(repo-common repo-core repo-backend)
 
 #
 # CUDA
 #
-if(${TRITON_ENABLE_GPU})
+if (${TRITON_ENABLE_ROCM})
+  list(APPEND CMAKE_PREFIX_PATH "/opt/rocm-6.0.2")
+  find_package(hip REQUIRED CONFIG PATHS ${HIP_DIR} ${ROCM_PATH} /opt/rocm-6.0.2)
+  set(DOCKER_IMAGE_PYTORCH_LIB_PATH "/opt/conda/envs/py_3.10/lib/python3.10/site-packages/torch/lib")
+  set(LIBOPEN_PATH "/usr/lib/x86_64-linux-gnu")
+  set(LIBJPEG_FILE "/opt/conda/lib/libjpeg.so.9.5.0")
+  set(PYTORCH_SRC_DIR "/var/lib/jenkins")
+  set(PYTORCH_INCLUDE_DIR "/var/lib/jenkins/pytorch/torch/include")
+  set(GPU_ENV "hip")
+elseif(${TRITON_ENABLE_GPU})
   find_package(CUDAToolkit REQUIRED)
+  set(DOCKER_IMAGE_PYTORCH_LIB_PATH "/usr/local/lib/python3.10/dist-packages/torch/lib")
+  set(LIBOPEN_PATH "/usr/local/lib")
+  set(LIBJPEG_FILE "/usr/lib/${LIBS_ARCH}-linux-gnu/libjpeg.so.8.2.2")
+  set(PYTORCH_SRC_DIR "/opt/pytorch")
+  set(PYTORCH_INCLUDE_DIR "/usr/local/lib/python3.10/dist-packages/torch/include")
+  set(GPU_ENV "cuda")
 else()
+  set(DOCKER_IMAGE_PYTORCH_LIB_PATH "/usr/local/lib/python3.10/dist-packages/torch/lib")
+  set(LIBOPEN_PATH "/usr/local/lib")
+  set(LIBJPEG_FILE "/usr/lib/${LIBS_ARCH}-linux-gnu/libjpeg.so.8.2.2")
+  set(PYTORCH_SRC_DIR "/opt/pytorch")
+  set(PYTORCH_INCLUDE_DIR "/usr/local/lib/python3.10/dist-packages/torch/include")
+  set(GPU_ENV "cuda")
   if (${TRITON_PYTORCH_ENABLE_TORCHTRT})
     message(FATAL_ERROR "TRITON_PYTORCH_ENABLE_TORCHTRT is ON when TRITON_ENABLE_GPU is OFF")
   endif()
@@ -159,34 +190,33 @@ if (${TRITON_PYTORCH_ENABLE_TORCHTRT})
 endif() # TRITON_PYTORCH_ENABLE_TORCHTRT
 
 if (CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
+  set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/local/lib")
   set(LIBS_ARCH "aarch64")
   set(LIBTORCH_LIBS
       "libopenblas.so.0"
-      "libnvpl_blas_core.so.0"
-      "libnvpl_blas_ilp64_gomp.so.0"
-      "libnvpl_blas_ilp64_seq.so.0"
-      "libnvpl_blas_lp64_gomp.so.0"
-      "libnvpl_blas_lp64_seq.so.0"
-      "libnvpl_lapack_core.so.0"
-      "libnvpl_lapack_ilp64_gomp.so.0"
-      "libnvpl_lapack_ilp64_seq.so.0"
-      "libnvpl_lapack_lp64_gomp.so.0"
-      "libnvpl_lapack_lp64_seq.so.0"
   )
 else()
   set(LIBS_ARCH "x86_64")
-  set(LIBTORCH_LIBS
-    "libmkl_avx2.so.1"
-    "libmkl_avx512.so.1"
-    "libmkl_core.so.1"
-    "libmkl_def.so.1"
-    "libmkl_gnu_thread.so.1"
-    "libmkl_intel_lp64.so.1"
-    "libmkl_intel_thread.so.1"
-    "libmkl_rt.so.1"
-    "libmkl_sequential.so.1"
-    "libmkl_vml_def.so.1"
-  )
+  if (${TRITON_ENABLE_ROCM})
+    set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/lib/x86_64-linux-gnu/atlas")
+    set(LIBTORCH_LIBS
+        "libblas.so.3.10.3"
+    )
+  else()
+    set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/local/lib")
+    set(LIBTORCH_LIBS
+      "libmkl_avx2.so.1"
+      "libmkl_avx512.so.1"
+      "libmkl_core.so.1"
+      "libmkl_def.so.1"
+      "libmkl_gnu_thread.so.1"
+      "libmkl_intel_lp64.so.1"
+      "libmkl_intel_thread.so.1"
+      "libmkl_rt.so.1"
+      "libmkl_sequential.so.1"
+      "libmkl_vml_def.so.1"
+    )
+  endif()
 endif()
 set(OPENCV_LIBS
     "libopencv_video.so"
@@ -217,47 +247,51 @@ if (${TRITON_PYTORCH_DOCKER_BUILD})
       include/torch
       include/torchvision
     COMMAND ${CMAKE_COMMAND} -E make_directory "include/torchvision"
-    COMMAND docker pull ${TRITON_PYTORCH_DOCKER_IMAGE}
-    COMMAND docker rm pytorch_backend_ptlib || echo "error ignored..." || true
-    COMMAND docker create --name pytorch_backend_ptlib ${TRITON_PYTORCH_DOCKER_IMAGE}
-    COMMAND /bin/sh -c "for i in ${LIBTORCH_LIBS_STR} ; do echo copying $i && docker cp -L pytorch_backend_ptlib:/usr/local/lib/$i $i ; done"
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so libc10.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libc10_cuda.so libc10_cuda.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so libtorch.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so libtorch_cpu.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cuda.so libtorch_cuda.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cuda_linalg.so libtorch_cuda_linalg.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_global_deps.so libtorch_global_deps.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/lib/libcaffe2_nvrtc.so libcaffe2_nvrtc.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/libtorchvision.so libtorchvision.so
-    COMMAND /bin/sh -c "if [ ${TRITON_PYTORCH_ENABLE_TORCHTRT} = 'ON' ]; then docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch_tensorrt/lib/libtorchtrt_runtime.so libtorchtrt_runtime.so; fi"
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch_tensorrt/bin/torchtrtc torchtrtc || echo "error ignored..." || true
-    COMMAND docker cp pytorch_backend_ptlib:/opt/pytorch/pytorch/LICENSE LICENSE.pytorch
-    COMMAND docker cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch/include include/torch
-    COMMAND docker cp pytorch_backend_ptlib:/opt/pytorch/pytorch/torch/csrc/jit/codegen include/torch/torch/csrc/jit/.
-    COMMAND docker cp pytorch_backend_ptlib:/opt/pytorch/vision/torchvision/csrc include/torchvision/torchvision
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_videoio.so libopencv_videoio.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_highgui.so libopencv_highgui.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_video.so libopencv_video.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_imgcodecs.so libopencv_imgcodecs.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_imgproc.so libopencv_imgproc.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_core.so libopencv_core.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_calib3d.so libopencv_calib3d.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_features2d.so libopencv_features2d.so
-    COMMAND docker cp -L pytorch_backend_ptlib:/usr/local/lib/libopencv_flann.so libopencv_flann.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/lib/${LIBS_ARCH}-linux-gnu/libpng16.so.16.37.0 libpng16.so
-    COMMAND docker cp pytorch_backend_ptlib:/usr/lib/${LIBS_ARCH}-linux-gnu/libjpeg.so.8.2.2 libjpeg.so
-    COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_def.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_def.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx2.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx2.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx512.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx512.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_vml_def.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_intel_thread.so.1 libmkl_vml_def.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_vml_def.so.1; fi"
-    COMMAND /bin/sh -c "if [ -f libmkl_intel_thread.so.1 ]; then patchelf --add-needed libmkl_intel_lp64.so.1 libmkl_intel_thread.so.1; fi"
-    COMMAND docker rm pytorch_backend_ptlib
+    #COMMAND ${CMAKE_COMMAND} -E make_directory "include/torch"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "include/torch/torch"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "include/torch/torch/csrc"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "include/torch/torch/csrc/jit"
+    COMMAND podman pull ${TRITON_PYTORCH_DOCKER_IMAGE}
+    COMMAND podman rm pytorch_backend_ptlib || echo "error ignored..." || true
+    COMMAND podman create --name pytorch_backend_ptlib ${TRITON_PYTORCH_DOCKER_IMAGE}
+    COMMAND /bin/sh -c "for i in ${LIBTORCH_LIBS_STR} ; do echo copying $i && podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_BLAS_LIB_PATH}/$i $i ; done"
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libc10.so libc10.so
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libc10_${GPU_ENV}.so libc10_${GPU_ENV}.so
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libtorch.so libtorch.so
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libtorch_cpu.so libtorch_cpu.so
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libtorch_${GPU_ENV}.so libtorch_${GPU_ENV}.so
+    #COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libtorch_${GPU_ENV}_linalg.so libtorch_${GPU_ENV}_linalg.so
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libtorch_global_deps.so libtorch_global_deps.so
+    COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libcaffe2_nvrtc.so libcaffe2_nvrtc.so
+    #COMMAND podman cp pytorch_backend_ptlib:/usr/local/lib/libtorchvision.so libtorchvision.so
+    COMMAND /bin/sh -c "if [ ${TRITON_PYTORCH_ENABLE_TORCHTRT} = 'ON' ]; then podman cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch_tensorrt/lib/libtorchtrt_runtime.so libtorchtrt_runtime.so; fi"
+    #COMMAND podman cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch_tensorrt/bin/torchtrtc torchtrtc || echo "error ignored..." || true
+    COMMAND podman cp pytorch_backend_ptlib:${PYTORCH_SRC_DIR}/pytorch/LICENSE LICENSE.pytorch
+    COMMAND podman cp pytorch_backend_ptlib:${PYTORCH_INCLUDE_DIR}/. include/torch
+    COMMAND podman cp pytorch_backend_ptlib:${PYTORCH_SRC_DIR}/pytorch/torch/csrc/jit/codegen include/torch/torch/csrc/jit/.
+    COMMAND podman cp pytorch_backend_ptlib:${PYTORCH_SRC_DIR}/vision/torchvision/csrc include/torchvision/torchvision
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_videoio.so libopencv_videoio.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_highgui.so libopencv_highgui.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_video.so libopencv_video.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_imgcodecs.so libopencv_imgcodecs.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_imgproc.so libopencv_imgproc.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_core.so libopencv_core.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_calib3d.so libopencv_calib3d.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_features2d.so libopencv_features2d.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_flann.so libopencv_flann.so
+    COMMAND podman cp pytorch_backend_ptlib:/usr/lib/${LIBS_ARCH}-linux-gnu/libpng16.so.16.37.0 libpng16.so
+    COMMAND podman cp pytorch_backend_ptlib:${LIBJPEG_FILE} libjpeg.so
+    #COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_def.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_def.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx2.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx2.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx512.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx512.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_vml_def.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_intel_thread.so.1 libmkl_vml_def.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_vml_def.so.1; fi"
+    #COMMAND /bin/sh -c "if [ -f libmkl_intel_thread.so.1 ]; then patchelf --add-needed libmkl_intel_lp64.so.1 libmkl_intel_thread.so.1; fi"
+    COMMAND podman rm pytorch_backend_ptlib
     COMMENT "Extracting pytorch and torchvision libraries and includes from ${TRITON_PYTORCH_DOCKER_IMAGE}"
     VERBATIM
   )
@@ -316,7 +350,12 @@ target_compile_options(
     -Wall -Wextra -Wno-unused-parameter -Wno-type-limits>
 )
 
-if(${TRITON_ENABLE_GPU})
+if (${TRITON_ENABLE_ROCM})
+  target_compile_definitions(
+    triton-pytorch-backend
+    PRIVATE TRITON_ENABLE_ROCM=1
+  )
+elseif(${TRITON_ENABLE_GPU})
   target_compile_definitions(
     triton-pytorch-backend
     PRIVATE TRITON_ENABLE_GPU=1
@@ -402,7 +441,13 @@ target_link_libraries(
     ${TRITON_PYTORCH_LIBS}
 )
 
-if(${TRITON_ENABLE_GPU})
+if (${TRITON_ENABLE_ROCM})
+  target_link_libraries(
+    triton-pytorch-backend
+    PRIVATE
+      hip::host 
+  )
+elseif(${TRITON_ENABLE_GPU})
   target_link_libraries(
     triton-pytorch-backend
     PRIVATE

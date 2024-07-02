@@ -1,4 +1,4 @@
-// Copyright 2019-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2019-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -50,17 +50,16 @@
 #pragma GCC diagnostic pop
 #endif  // TRITON_PYTORCH_ENABLE_TORCHVISION
 
+#ifdef TRITON_ENABLE_ROCM
+#include <c10/hip/HIPCachingAllocator.h>
+#include <c10/hip/HIPGuard.h>
+#include <hip/hip_runtime_api.h>
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_runtime_api.h>
 #endif  // TRITON_ENABLE_GPU
-
-// for thread control
-// https://pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html#runtime-api
-// https://github.com/pytorch/pytorch/blob/v2.2.1-rc3/aten/src/ATen/Parallel.h#L133
-#include <ATen/Parallel.h>
-
 
 //
 // PyTorch C++ (LibTorch) Backend that implements the TRITONBACKEND API.
@@ -104,7 +103,6 @@ class ModelState : public BackendModel {
     return enable_jit_executor_pair_;
   }
   bool EnabledInferenceMode() { return enable_inference_mode_; }
-  bool EnabledCudnn() { return enable_cudnn_; }
   bool EnabledCacheCleaning() { return enable_cache_cleaning_; }
 
   bool EnabledWeightSharing() { return enable_weight_sharing_; }
@@ -125,9 +123,6 @@ class ModelState : public BackendModel {
 
   // Flag to indicate whether inference mode is enabled. Defaults to false.
   bool enable_inference_mode_;
-
-  // Flag to indicate whether cudnn is enabled. Defaults to true.
-  bool enable_cudnn_;
 
   // Flag to indicate whether cache cleaning after each run is enabled.
   // Defaults to false.
@@ -231,9 +226,8 @@ ModelState::Create(TRITONBACKEND_Model* triton_model, ModelState** state)
 
 ModelState::ModelState(TRITONBACKEND_Model* triton_model)
     : BackendModel(triton_model), enable_optimized_execution_(true),
-      enable_inference_mode_(true), enable_cudnn_(true),
-      enable_cache_cleaning_(false), enable_weight_sharing_(false),
-      enable_tensor_fuser_pair_({false, true}),
+      enable_inference_mode_(true), enable_cache_cleaning_(false),
+      enable_weight_sharing_(false), enable_tensor_fuser_pair_({false, true}),
       enable_jit_profiling_pair_({false, true}),
       enable_jit_executor_pair_({false, true})
 {
@@ -398,24 +392,6 @@ ModelState::ParseParameters()
          " for model instance '" + Name() + "'")
             .c_str());
 
-    // If 'DISABLE_CUDNN' is not present in 'parameters' then no update is made
-    // to 'enable_cudnn_'.
-    bool disable_cudnn = false;
-    err = ParseParameter(params, "DISABLE_CUDNN", &disable_cudnn);
-    if (err != nullptr) {
-      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
-        return err;
-      } else {
-        TRITONSERVER_ErrorDelete(err);
-      }
-    }
-    enable_cudnn_ = !disable_cudnn;
-    LOG_MESSAGE(
-        TRITONSERVER_LOG_INFO,
-        (std::string("cuDNN is ") + (enable_cudnn_ ? "enabled" : "disabled") +
-         " for model instance '" + Name() + "'")
-            .c_str());
-
     // If 'ENABLE_TENSOR_FUSER' is not present in 'parameters' then no
     // update is made to 'enable_tensor_fuser'.
     bool enable_tensor_fuser = false;
@@ -493,54 +469,6 @@ ModelState::ParseParameters()
            (enable_jit_executor ? "enabled" : "disabled") +
            " for model instance '" + Name() + "'")
               .c_str());
-    }
-
-    // If 'INTRA_OP_THREAD_COUNT' is not present in 'parameters' then no update
-    // is made to 'intra_op_thread_count', which by default will take all
-    // threads
-    int intra_op_thread_count = -1;
-    err =
-        ParseParameter(params, "INTRA_OP_THREAD_COUNT", &intra_op_thread_count);
-    if (err != nullptr) {
-      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
-        return err;
-      } else {
-        TRITONSERVER_ErrorDelete(err);
-      }
-    } else {
-      if (intra_op_thread_count > 0) {
-        at::set_num_threads(intra_op_thread_count);
-        LOG_MESSAGE(
-            TRITONSERVER_LOG_INFO,
-            (std::string("Intra op thread count is set to ") +
-             std::to_string(intra_op_thread_count) + " for model instance '" +
-             Name() + "'")
-                .c_str());
-      }
-    }
-
-    // If 'INTER_OP_THREAD_COUNT' is not present in 'parameters' then no update
-    // is made to 'inter_op_thread_count', which by default will take all
-    // threads
-    int inter_op_thread_count = -1;
-    err =
-        ParseParameter(params, "INTER_OP_THREAD_COUNT", &inter_op_thread_count);
-    if (err != nullptr) {
-      if (TRITONSERVER_ErrorCode(err) != TRITONSERVER_ERROR_NOT_FOUND) {
-        return err;
-      } else {
-        TRITONSERVER_ErrorDelete(err);
-      }
-    } else {
-      if (inter_op_thread_count > 0) {
-        at::set_num_interop_threads(inter_op_thread_count);
-        LOG_MESSAGE(
-            TRITONSERVER_LOG_INFO,
-            (std::string("Inter op thread count is set to ") +
-             std::to_string(inter_op_thread_count) + " for model instance '" +
-             Name() + "'")
-                .c_str());
-      }
     }
   }
 
@@ -635,6 +563,7 @@ class ModelInstanceState : public BackendModelInstance {
   float GetCudaEventElapsedTime(
       const cudaEvent_t& start_event, const cudaEvent_t& end_event);
 
+
   ModelState* model_state_;
 
   // The full path to the TorchScript model file.
@@ -709,6 +638,21 @@ ModelInstanceState::ModelInstanceState(
       ArtifactFilename(), device_, &model_path_, Kind(), &torch_model_));
 
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) {
+#ifdef TRITON_ENABLE_ROCM
+    for (int i = 0; i < device_cnt_; i++) {
+      hipStream_t stream;
+      //Using CreateCudaStream because MLSE developers maintained the
+      //CUDA naming conventing rather than renaming to HIP
+      THROW_IF_BACKEND_INSTANCE_ERROR(
+          CreateCudaStream(i, 0 /* cuda_stream_priority */, &stream));
+      stream_vec_.push_back(stream);
+    }
+    if (!stream_vec_.empty()) {
+      // Create CUDA events on the first device that will be used for collecting
+      // inputs/outputs.
+      CreateCudaEvents(0);
+    }
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
     // Since we cannot determine the exact devices used by the model, we create
     // a CUDA stream for every available device to ensure proper synchronization
@@ -806,6 +750,22 @@ ModelInstanceState::~ModelInstanceState()
   ClearCache();
 
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) {
+#ifdef TRITON_ENABLE_ROCM
+    for (size_t i = 0; i < stream_vec_.size(); i++) {
+      LOG_IF_ERROR(
+          ConvertCUDAStatusToTritonError(
+              hipSetDevice(i), TRITONSERVER_ERROR_INTERNAL,
+              "Failed to set the device"),
+          "Failed to set the device");
+
+      LOG_IF_ERROR(
+          ConvertCUDAStatusToTritonError(
+              hipStreamDestroy(stream_vec_[i]), TRITONSERVER_ERROR_INTERNAL,
+              "Failed to destroy cuda stream"),
+          "~ModelInstanceState error: ");
+      stream_vec_[i] = nullptr;
+    }
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
     for (size_t i = 0; i < stream_vec_.size(); i++) {
       LOG_IF_ERROR(
@@ -1391,6 +1351,14 @@ ModelInstanceState::ProcessRequests(
   // input duration since only one stream will be used for input collection.
   if ((Kind() == TRITONSERVER_INSTANCEGROUPKIND_GPU) ||
       ((Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) && (device_cnt_ > 0))) {
+#ifdef TRITON_ENABLE_ROCM
+    RESPOND_ALL_AND_SET_TRUE_IF_ERROR(
+        responses, request_count, all_response_failed,
+        ConvertCUDAStatusToTritonError(
+            hipEventRecord(
+                compute_input_start_event_, GetCudaStreamByInstanceKind()),
+            TRITONSERVER_ERROR_INTERNAL, "Failed to record the event."));
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
     RESPOND_ALL_AND_SET_TRUE_IF_ERROR(
         responses, request_count, all_response_failed,
@@ -1414,6 +1382,12 @@ ModelInstanceState::ProcessRequests(
             collector.get(), &input_names, &input_tensors, &cuda_copy));
   }
 
+#ifdef TRITON_ENABLE_ROCM
+  if (cuda_copy) {
+    hipStreamSynchronize(GetCudaStreamByInstanceKind());
+    cuda_copy = false;
+  }
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
   if (cuda_copy) {
     cudaStreamSynchronize(GetCudaStreamByInstanceKind());
@@ -1465,6 +1439,15 @@ ModelInstanceState::ProcessRequests(
     }
   }
 
+#ifdef TRITON_ENABLE_ROCM
+  if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) {
+    // For 'KIND_MODEL', multiple streams will be involved, so we need to call
+    // 'hipStreamSynchronize' before reading the output tensors.
+    for (auto& stream : stream_vec_) {
+      hipStreamSynchronize(stream);
+    }
+  }
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) {
     // For 'KIND_MODEL', multiple streams will be involved, so we need to call
@@ -1584,9 +1567,6 @@ ModelInstanceState::Execute(
 
     // enable/disable inference mode - supersedes NoGradGuard
     torch::InferenceMode infer_guard(model_state_->EnabledInferenceMode());
-
-    // enable/disable cudnn
-    at::globalContext().setUserEnabledCuDNN(model_state_->EnabledCudnn());
 
     // JIT. No change is made unless parameter is explicitly set.
     if (std::get<0>(model_state_->EnabledJitProfiling())) {
@@ -1930,6 +1910,12 @@ SetStringInputTensor(
     return cuda_copy;
   }
 
+#ifdef TRITON_ENABLE_ROCM
+  if (cuda_copy) {
+    hipStreamSynchronize(stream);
+    cuda_copy = false;
+}
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
   if (cuda_copy) {
     cudaStreamSynchronize(stream);
@@ -2436,6 +2422,9 @@ ModelInstanceState::ReadOutputTensors(
   // Finalize and wait for any pending buffer copies.
   cuda_copy |= responder.Finalize();
 
+#ifdef TRITON_ENABLE_ROCM
+  hipStreamSynchronize(GetCudaStreamByInstanceKind());
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
   // We have to always synchronize the stream. This is to make sure that
   // the events on the cuda stream are synchronized. Otherwise, the events
@@ -2453,6 +2442,12 @@ ModelInstanceState::RecordBackendTimestamp(
 {
   if ((Kind() == TRITONSERVER_INSTANCEGROUPKIND_GPU) ||
       ((Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) && (device_cnt_ > 0))) {
+#ifdef TRITON_ENABLE_ROCM
+    hipEvent_t* lcuda_event = reinterpret_cast<hipEvent_t*>(cuda_event);
+    RETURN_IF_ERROR(ConvertCUDAStatusToTritonError(
+        hipEventRecord(*lcuda_event, GetCudaStreamByInstanceKind()),
+        TRITONSERVER_ERROR_INTERNAL, "Failed to record the event."));
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
     cudaEvent_t* lcuda_event = reinterpret_cast<cudaEvent_t*>(cuda_event);
     RETURN_IF_ERROR(ConvertCUDAStatusToTritonError(
@@ -2468,6 +2463,20 @@ ModelInstanceState::RecordBackendTimestamp(
 void
 ModelInstanceState::CreateCudaEvents(const int32_t& device_id)
 {
+#ifdef TRITON_ENABLE_ROCM
+  THROW_IF_BACKEND_INSTANCE_ERROR(ConvertCUDAStatusToTritonError(
+      hipSetDevice(device_id), TRITONSERVER_ERROR_INTERNAL,
+      "Failed to set the device"));
+  THROW_IF_BACKEND_INSTANCE_ERROR(ConvertCUDAStatusToTritonError(
+      hipEventCreate(&compute_input_start_event_), TRITONSERVER_ERROR_INTERNAL,
+      "Failed to create cuda event"));
+  THROW_IF_BACKEND_INSTANCE_ERROR(ConvertCUDAStatusToTritonError(
+      hipEventCreate(&compute_infer_start_event_), TRITONSERVER_ERROR_INTERNAL,
+      "Failed to create cuda event"));
+  THROW_IF_BACKEND_INSTANCE_ERROR(ConvertCUDAStatusToTritonError(
+      hipEventCreate(&compute_output_start_event_),
+      TRITONSERVER_ERROR_INTERNAL, "Failed to create cuda event"));
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
   // Need to set the CUDA context so that the context that events are
   // created on match with contexts that events are recorded with.
@@ -2501,6 +2510,7 @@ ModelInstanceState::GetCudaStreamByInstanceKind()
   return nullptr;
 }
 
+
 void
 ModelInstanceState::SetCurrentCudaStream(
     const cudaStream_t& stream, const int& device_id)
@@ -2521,6 +2531,13 @@ ModelInstanceState::GetCudaEventElapsedTime(
     const cudaEvent_t& start_event, const cudaEvent_t& end_event)
 {
   float duration = 0;
+#ifdef TRITON_ENABLE_ROCM
+  LOG_IF_ERROR(
+      ConvertCUDAStatusToTritonError(
+          hipEventElapsedTime(&duration, start_event, end_event),
+          TRITONSERVER_ERROR_INTERNAL, "Failed to capture elapsed time"),
+      "Failed to capture elapsed time");
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
   // [FIXME] in the case of cudaEventElapsedTime failure, should handle
   // stats reporting more gracefully as the durations are inaccurate

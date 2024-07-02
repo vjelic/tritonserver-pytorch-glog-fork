@@ -1,4 +1,4 @@
-// Copyright (c) 2020-24 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright (c) 2020-21 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -149,19 +149,19 @@ ParseParameter(
   return nullptr;
 }
 
+#ifdef TRITON_ENABLE_ROCM
 TRITONSERVER_Error*
-ParseParameter(
-    triton::common::TritonJson::Value& params, const std::string& mkey,
-    int* value)
+ConvertCUDAStatusToTritonError(
+    hipError_t cuda_error, TRITONSERVER_Error_Code code, const char* msg)
 {
-  std::string value_str;
-  RETURN_IF_ERROR(GetParameterValue(params, mkey, &value_str));
-  RETURN_IF_ERROR(ParseIntValue(value_str, value));
-
-  return nullptr;
+  if (cuda_error != hipSuccess) {
+    return TRITONSERVER_ErrorNew(
+        code,
+        (std::string(msg) + ": " + hipGetErrorString(cuda_error)).c_str());
+  }
+  return nullptr;  // success
 }
-
-
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
 TRITONSERVER_Error*
 ConvertCUDAStatusToTritonError(

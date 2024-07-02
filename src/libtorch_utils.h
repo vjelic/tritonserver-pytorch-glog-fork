@@ -1,4 +1,4 @@
-// Copyright 2020-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Copyright 2020-2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -29,6 +29,9 @@
 #include "triton/backend/backend_common.h"
 #include "triton/core/tritonserver.h"
 
+#ifdef TRITON_ENABLE_ROCM
+#include <hip/hip_runtime_api.h>
+#endif  // TRITON_ENABLE_ROCM
 // Suppress warnings in torch headers
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wsign-compare"
@@ -50,6 +53,10 @@ std::pair<bool, torch::ScalarType> ConvertDataTypeToTorchType(
 std::pair<bool, torch::ScalarType> ModelConfigDataTypeToTorchType(
     const std::string& data_type_str);
 
+#ifdef TRITON_ENABLE_ROCM
+TRITONSERVER_Error* ConvertCUDAStatusToTritonError(
+    hipError_t cuda_error, TRITONSERVER_Error_Code code, const char* msg);
+#endif  // TRITON_ENABLE_ROCM
 #ifdef TRITON_ENABLE_GPU
 TRITONSERVER_Error* ConvertCUDAStatusToTritonError(
     cudaError_t cuda_error, TRITONSERVER_Error_Code code, const char* msg);
@@ -61,12 +68,5 @@ TRITONSERVER_Error* ConvertCUDAStatusToTritonError(
 TRITONSERVER_Error* ParseParameter(
     triton::common::TritonJson::Value& params, const std::string& mkey,
     bool* value);
-
-// If the key 'mkey' is present in 'params' then update 'value' with the
-// value associated with that key. If 'mkey' is not present in 'params' then
-// 'value' is set to 'default_value'.
-TRITONSERVER_Error* ParseParameter(
-    triton::common::TritonJson::Value& params, const std::string& mkey,
-    int* value);
 
 }}}  // namespace triton::backend::pytorch
