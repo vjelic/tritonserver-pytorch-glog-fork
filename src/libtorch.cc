@@ -762,7 +762,8 @@ ModelInstanceState::ClearCache()
 #if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
   if (device_.is_cuda() ||
       ((Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) && (device_cnt_ > 0))) {
-    c10::cuda::CUDACachingAllocator::emptyCache();
+    //c10::cuda::CUDACachingAllocator::emptyCache();
+    c10::hip::HIPCachingAllocator::emptyCache();
   }
 #endif  // TRITON_ENABLE_GPU
 }
@@ -2591,13 +2592,13 @@ ModelInstanceState::SetCurrentCudaStream(
 #endif
 {
 #if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
-  at::cuda::CUDAStream torch_stream =
-      at::cuda::getStreamFromExternal(stream, device_id);
+  at::hip::HIPStream torch_stream =
+      at::hip::getStreamFromExternal(stream, device_id);
   // This function replaces the default stream with the stream we created. It
   // is not necessary to change the current device to the desired device when
   // replacing the default stream for that device. See the documentation here:
   // https://pytorch.org/cppdocs/api/function_namespacec10_1_1cuda_1a6ed50cc0fc16cc7014d9c2f4c3bd098d.html
-  at::cuda::setCurrentCUDAStream(torch_stream);
+  at::hip::setCurrentHIPStream(torch_stream);
 #endif
 }
 
