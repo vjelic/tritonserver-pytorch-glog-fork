@@ -552,16 +552,29 @@ class ModelInstanceState : public BackendModelInstance {
 
   // Get the appropriate CUDA stream for input and output handling based on the
   // instance group type.
+#ifdef TRITON_ENABLE_ROCM
+  hipStream_t GetCudaStreamByInstanceKind();
+#else
   cudaStream_t GetCudaStreamByInstanceKind();
+#endif
 
   // Replace the default CUDA stream with the stream we created to ensure proper
   // cuda stream synchronization.
+#ifdef TRITON_ENABLE_ROCM
+  void SetCurrentCudaStream(
+      const hipStream_t& stream, const int32_t& device_id);
+
+  // Get the elapsed time between two CUDA events.
+  float GetCudaEventElapsedTime(
+      const hipEvent_t& start_event, const hipEvent_t& end_event);
+#else
   void SetCurrentCudaStream(
       const cudaStream_t& stream, const int32_t& device_id);
 
   // Get the elapsed time between two CUDA events.
   float GetCudaEventElapsedTime(
       const cudaEvent_t& start_event, const cudaEvent_t& end_event);
+#endif
 
 
   ModelState* model_state_;
@@ -588,12 +601,22 @@ class ModelInstanceState : public BackendModelInstance {
   // If the model supports batching.
   bool supports_batching_;
 
+#ifdef TRITON_ENABLE_ROCM
+  hipEvent_t compute_input_start_event_;
+  hipEvent_t compute_infer_start_event_;
+  hipEvent_t compute_output_start_event_;
+#else
   cudaEvent_t compute_input_start_event_;
   cudaEvent_t compute_infer_start_event_;
   cudaEvent_t compute_output_start_event_;
+#endif
 
   // Store the cuda streams created for the 'KIND_MODEL' instance group.
+#ifdef TRITON_ENABLE_ROCM
+  std::vector<hipStream_t> stream_vec_;
+#else
   std::vector<cudaStream_t> stream_vec_;
+#endif
 
   // The number of available devices.
   int device_cnt_;
@@ -624,13 +647,13 @@ ModelInstanceState::ModelInstanceState(
       device_cnt_(0)
 {
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_GPU) {
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
     device_ = torch::Device(torch::kCUDA, DeviceId());
     CreateCudaEvents(DeviceId());
 #endif
   }
 
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
   device_cnt_ = torch::cuda::device_count();
 #endif
 
@@ -736,7 +759,7 @@ ModelInstanceState::ModelInstanceState(
 void
 ModelInstanceState::ClearCache()
 {
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
   if (device_.is_cuda() ||
       ((Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) && (device_cnt_ > 0))) {
     c10::cuda::CUDACachingAllocator::emptyCache();
@@ -1231,7 +1254,7 @@ ModelInstanceState::ProcessRequests(
        std::to_string(request_count) + " requests")
           .c_str());
 
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_GPU) {
     SetCurrentCudaStream(stream_, DeviceId());
   } else if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) {
@@ -1502,7 +1525,7 @@ ModelInstanceState::ProcessRequests(
   // We don't need an explicit CUDA syncrhonization here since we have already
   // synchronized the stream in the ReadOutputTensors function.
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_GPU) {
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
     float compute_input_duration = GetCudaEventElapsedTime(
         compute_input_start_event_, compute_infer_start_event_);
     float compute_infer_duration = GetCudaEventElapsedTime(
@@ -1513,7 +1536,7 @@ ModelInstanceState::ProcessRequests(
 #endif
   } else if (
       (Kind() == TRITONSERVER_INSTANCEGROUPKIND_MODEL) && (device_cnt_ > 0)) {
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
     float compute_input_duration = GetCudaEventElapsedTime(
         compute_input_start_event_, compute_infer_start_event_);
     uint64_t compute_infer_duration =
@@ -1808,11 +1831,18 @@ ModelInstanceState::GetNamingConvention(
 // conducted.  The data copy can be avoided if the input is already in
 // a contiguous chunk and the input is located in memory type and id
 // specified.
+#ifdef TRITON_ENABLE_ROCM
 TRITONSERVER_Error*
 GetContiguousInputContent(
     TRITONBACKEND_Input* rinput, const uint32_t buffer_count,
     const char** content, size_t* content_byte_size,
+    std::vector<char>* contiguous_buffer, hipStream_t stream, bool* cuda_copy)
+#else
+GetContiguousInputContent(
+    TRITONBACKEND_Input* rinput, const uint32_t buffer_count,
+    const char** content, size_t* content_byte_size,
     std::vector<char>* contiguous_buffer, cudaStream_t stream, bool* cuda_copy)
+#endif
 {
   *cuda_copy = false;
 
@@ -1883,12 +1913,21 @@ FillStringTensor(torch::List<std::string>* input_list, const size_t cnt)
   }
 }
 
+#ifdef TRITON_ENABLE_ROCM
+bool
+SetStringInputTensor(
+    torch::List<std::string>* input_list, TRITONBACKEND_Input* input,
+    const char* name, const uint32_t buffer_count,
+    const size_t request_element_cnt, TRITONBACKEND_Response** response,
+    hipStream_t stream, const char* host_policy_name)
+#else
 bool
 SetStringInputTensor(
     torch::List<std::string>* input_list, TRITONBACKEND_Input* input,
     const char* name, const uint32_t buffer_count,
     const size_t request_element_cnt, TRITONBACKEND_Response** response,
     cudaStream_t stream, const char* host_policy_name)
+#endif
 {
   bool cuda_copy = false;
   size_t element_idx = 0;
@@ -1984,12 +2023,21 @@ SetStringInputTensor(
   return cuda_copy;
 }
 
+#ifdef TRITON_ENABLE_ROCM
+bool
+SetStringBuffer(
+    torch::List<torch::jit::IValue>* tensor, TRITONBACKEND_Response** response,
+    TRITONBACKEND_Output* response_output, TRITONBACKEND_State* response_state,
+    const size_t tensor_element_count, hipStream_t stream,
+    std::string* serialized, bool state)
+#else
 bool
 SetStringBuffer(
     torch::List<torch::jit::IValue>* tensor, TRITONBACKEND_Response** response,
     TRITONBACKEND_Output* response_output, TRITONBACKEND_State* response_state,
     const size_t tensor_element_count, cudaStream_t stream,
     std::string* serialized, bool state)
+#endif
 {
   bool cuda_copy = false;
 
@@ -2054,22 +2102,38 @@ SetStringBuffer(
 }
 
 
+#ifdef TRITON_ENABLE_ROCM
+bool
+SetStringOutputBuffer(
+    torch::List<torch::jit::IValue>* tensor, TRITONBACKEND_Response** response,
+    TRITONBACKEND_Output* response_output, const size_t tensor_element_count,
+    hipStream_t stream, std::string* serialized)
+#else
 bool
 SetStringOutputBuffer(
     torch::List<torch::jit::IValue>* tensor, TRITONBACKEND_Response** response,
     TRITONBACKEND_Output* response_output, const size_t tensor_element_count,
     cudaStream_t stream, std::string* serialized)
+#endif
 {
   return SetStringBuffer(
       tensor, response, response_output, nullptr /* response_state */,
       tensor_element_count, stream, serialized, false /* state */);
 }
 
+#ifdef TRITON_ENABLE_ROCM
+bool
+SetStringStateBuffer(
+    torch::List<torch::jit::IValue>* tensor, TRITONBACKEND_Response** response,
+    TRITONBACKEND_State* response_state, const size_t tensor_element_count,
+    hipStream_t stream, std::string* serialized)
+#else
 bool
 SetStringStateBuffer(
     torch::List<torch::jit::IValue>* tensor, TRITONBACKEND_Response** response,
     TRITONBACKEND_State* response_state, const size_t tensor_element_count,
     cudaStream_t stream, std::string* serialized)
+#endif
 {
   return SetStringBuffer(
       tensor, response, nullptr /* response_output */, response_state,
@@ -2495,10 +2559,15 @@ ModelInstanceState::CreateCudaEvents(const int32_t& device_id)
 #endif
 }
 
+#ifdef TRITON_ENABLE_ROCM
+hipStream_t
+ModelInstanceState::GetCudaStreamByInstanceKind()
+#else
 cudaStream_t
 ModelInstanceState::GetCudaStreamByInstanceKind()
+#endif
 {
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
   if (Kind() == TRITONSERVER_INSTANCEGROUPKIND_GPU) {
     return stream_;
   } else if (
@@ -2511,11 +2580,17 @@ ModelInstanceState::GetCudaStreamByInstanceKind()
 }
 
 
+#ifdef TRITON_ENABLE_ROCM
+void
+ModelInstanceState::SetCurrentCudaStream(
+    const hipStream_t& stream, const int& device_id)
+#else
 void
 ModelInstanceState::SetCurrentCudaStream(
     const cudaStream_t& stream, const int& device_id)
+#endif
 {
-#ifdef TRITON_ENABLE_GPU
+#if defined(TRITON_ENABLE_GPU) || defined(TRITON_ENABLE_ROCM) 
   at::cuda::CUDAStream torch_stream =
       at::cuda::getStreamFromExternal(stream, device_id);
   // This function replaces the default stream with the stream we created. It
@@ -2526,9 +2601,15 @@ ModelInstanceState::SetCurrentCudaStream(
 #endif
 }
 
+#ifdef TRITON_ENABLE_ROCM
+float
+ModelInstanceState::GetCudaEventElapsedTime(
+    const hipEvent_t& start_event, const hipEvent_t& end_event)
+#else
 float
 ModelInstanceState::GetCudaEventElapsedTime(
     const cudaEvent_t& start_event, const cudaEvent_t& end_event)
+#endif
 {
   float duration = 0;
 #ifdef TRITON_ENABLE_ROCM
