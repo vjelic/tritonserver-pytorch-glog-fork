@@ -113,7 +113,7 @@ if (${TRITON_ENABLE_ROCM})
     GIT_REPOSITORY https://github.com/AMD-AI/tritonserver_backend.git
     GIT_TAG rocm_dev 
     GIT_SHALLOW ON
-  )
+    )
 else()
   FetchContent_Declare(
     repo-backend
@@ -165,7 +165,17 @@ endif() # TRITON_ENABLE_NVTX
 #
 configure_file(src/libtriton_pytorch.ldscript libtriton_pytorch.ldscript COPYONLY)
 
-set(PT_LIBS
+if (${TRITON_ENABLE_ROCM})
+  set(PT_LIBS
+    "libc10.so"
+    "libc10_hip.so"
+    "libtorch.so"
+    "libtorch_cpu.so"
+    "libtorch_hip.so"
+    "libtorch_global_deps.so"
+  )
+else()
+  set(PT_LIBS
     "libc10.so"
     "libc10_cuda.so"
     "libtorch.so"
@@ -173,7 +183,8 @@ set(PT_LIBS
     "libtorch_cuda.so"
     "libtorch_cuda_linalg.so"
     "libtorch_global_deps.so"
-)
+  )
+endif() # TRITON_ENABLE_ROCM
 
 if (${TRITON_PYTORCH_ENABLE_TORCHVISION})
   set(PT_LIBS
@@ -264,6 +275,7 @@ if (${TRITON_PYTORCH_DOCKER_BUILD})
     COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libtorch_global_deps.so libtorch_global_deps.so
     COMMAND podman cp pytorch_backend_ptlib:${DOCKER_IMAGE_PYTORCH_LIB_PATH}/libcaffe2_nvrtc.so libcaffe2_nvrtc.so
     #COMMAND podman cp pytorch_backend_ptlib:/usr/local/lib/libtorchvision.so libtorchvision.so
+    COMMAND podman cp pytorch_backend_ptlib:/opt/conda/envs/py_3.10/lib/python3.10/site-packages/torchvision-0.16.1+fdea156-py3.10-linux-x86_64.egg/torchvision/_C.so libtorchvision.so
     COMMAND /bin/sh -c "if [ ${TRITON_PYTORCH_ENABLE_TORCHTRT} = 'ON' ]; then podman cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch_tensorrt/lib/libtorchtrt_runtime.so libtorchtrt_runtime.so; fi"
     #COMMAND podman cp pytorch_backend_ptlib:/usr/local/lib/python3.10/dist-packages/torch_tensorrt/bin/torchtrtc torchtrtc || echo "error ignored..." || true
     COMMAND podman cp pytorch_backend_ptlib:${PYTORCH_SRC_DIR}/pytorch/LICENSE LICENSE.pytorch
@@ -380,7 +392,7 @@ set_target_properties(
 set_target_properties(
   triton-pytorch-backend
   PROPERTIES COMPILE_FLAGS
-    "-Wno-unknown-pragmas -Wno-unused-but-set-variable"
+  "-Wno-unknown-pragmas -Wno-unused-but-set-variable"
 )
 
 if (${TRITON_PYTORCH_DOCKER_BUILD})
