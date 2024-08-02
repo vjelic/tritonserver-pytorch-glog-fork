@@ -50,7 +50,7 @@ option(TRITON_ENABLE_ROCM "Enable AMD GPU support in backend" ON)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
 option(TRITON_ENABLE_NVTX "Include nvtx markers collection in backend." OFF)
 option(TRITON_PYTORCH_ENABLE_TORCHTRT "Enable TorchTRT support" OFF)
-option(TRITON_PYTORCH_ENABLE_TORCHVISION "Enable Torchvision support" ON)
+option(TRITON_PYTORCH_ENABLE_TORCHVISION "Enable Torchvision support" OFF)
 
 set(TRITON_PYTORCH_DOCKER_IMAGE "" CACHE STRING "Docker image containing the PyTorch build required by backend.")
 set(TRITON_PYTORCH_INCLUDE_PATHS "" CACHE PATH "Paths to Torch includes")
@@ -66,6 +66,13 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(TRITON_PYTORCH_DOCKER_BUILD OFF)
+if(${TRITON_ENABLE_ROCM})
+  #set(PYTORCH_ROCM_ARCH "gfx900 gfx906 gfx908 gfx90a gfx1030 gfx1100 gfx1101 gfx940 gfx941 gfx942")
+  find_package(Torch REQUIRED)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+  set(TRITON_PYTORCH_LIB_PATHS "${TORCH_INSTALL_PREFIX}/lib")
+  set(TRITON_PYTORCH_INCLUDE_PATHS "${TORCH_INCLUDE_DIRS}")
+endif()
 if(TRITON_PYTORCH_LIB_PATHS STREQUAL "")
   if(TRITON_PYTORCH_DOCKER_IMAGE STREQUAL "")
     message(FATAL_ERROR "Using the PyTorch docker based build requires TRITON_PYTORCH_DOCKER_IMAGE")
@@ -348,7 +355,9 @@ if (${TRITON_PYTORCH_DOCKER_BUILD})
 else()
   target_include_directories(
     triton-pytorch-backend
-    PRIVATE ${TRITON_PYTORCH_INCLUDE_PATHS}
+    PRIVATE 
+      ${TRITON_PYTORCH_INCLUDE_PATHS}
+      ${PYTORCH_INCLUDE_DIR}
   )
 endif() # TRITON_PYTORCH_DOCKER_BUILD
 
@@ -548,6 +557,7 @@ else()
     DESTINATION ${CMAKE_INSTALL_PREFIX}/backends/pytorch
   )
 
+if (${TRITON_ENABLE_ROCM} STREQUAL "OFF")
   FOREACH(plib ${PT_LIBS})
     install(
       CODE
@@ -560,6 +570,7 @@ else()
         endif()"
     )
   ENDFOREACH(plib)
+endif()
 endif() # TRITON_PYTORCH_DOCKER_BUILD
 
 install(
