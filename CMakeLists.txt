@@ -215,8 +215,14 @@ if (CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
   )
 else()
   set(LIBS_ARCH "x86_64")
-  set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/local/lib")
-  set(LIBTORCH_LIBS
+  if (${TRITON_ENABLE_ROCM})
+    set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/lib/x86_64-linux-gnu/atlas")
+    set(LIBTORCH_LIBS
+        "libblas.so.3.10.3"
+    )
+  else()
+    set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/local/lib")
+    set(LIBTORCH_LIBS
       "libmkl_avx2.so.1"
       "libmkl_avx512.so.1"
       "libmkl_core.so.1"
@@ -227,7 +233,8 @@ else()
       "libmkl_rt.so.1"
       "libmkl_sequential.so.1"
       "libmkl_vml_def.so.1"
-  )
+    )
+  endif()
 endif()
 set(OPENCV_LIBS
     "libopencv_video.so"
@@ -550,6 +557,7 @@ else()
     DESTINATION ${CMAKE_INSTALL_PREFIX}/backends/pytorch
   )
 
+if (${TRITON_ENABLE_ROCM} STREQUAL "OFF")
   FOREACH(plib ${PT_LIBS})
     install(
       CODE
@@ -562,6 +570,7 @@ else()
         endif()"
     )
   ENDFOREACH(plib)
+endif()
 endif() # TRITON_PYTORCH_DOCKER_BUILD
 
 install(
