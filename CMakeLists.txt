@@ -216,12 +216,10 @@ if (CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
 else()
   set(LIBS_ARCH "x86_64")
   if (${TRITON_ENABLE_ROCM})
-    set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/lib/x86_64-linux-gnu/atlas")
-    set(LIBTORCH_LIBS
-        "libblas.so.3.10.3"
-    )
+    set(DOCKER_IMAGE_BLAS_LIB_PATH "/opt/conda/envs/py_3.10/lib")
   else()
     set(DOCKER_IMAGE_BLAS_LIB_PATH "/usr/local/lib")
+  endif()
     set(LIBTORCH_LIBS
       "libmkl_avx2.so.1"
       "libmkl_avx512.so.1"
@@ -234,7 +232,6 @@ else()
       "libmkl_sequential.so.1"
       "libmkl_vml_def.so.1"
     )
-  endif()
 endif()
 set(OPENCV_LIBS
     "libopencv_video.so"
@@ -300,16 +297,16 @@ if (${TRITON_PYTORCH_DOCKER_BUILD})
     COMMAND podman cp pytorch_backend_ptlib:${LIBOPEN_PATH}/libopencv_flann.so libopencv_flann.so
     COMMAND podman cp pytorch_backend_ptlib:/usr/lib/${LIBS_ARCH}-linux-gnu/libpng16.so.16.37.0 libpng16.so
     COMMAND podman cp pytorch_backend_ptlib:${LIBJPEG_FILE} libjpeg.so
-    #COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_def.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_def.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx2.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx2.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx512.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx512.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_vml_def.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_intel_thread.so.1 libmkl_vml_def.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_vml_def.so.1; fi"
-    #COMMAND /bin/sh -c "if [ -f libmkl_intel_thread.so.1 ]; then patchelf --add-needed libmkl_intel_lp64.so.1 libmkl_intel_thread.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_def.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_def.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx2.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_avx2.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx2.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_avx512.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_avx512.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_avx512.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_gnu_thread.so.1 libmkl_vml_def.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_intel_thread.so.1 libmkl_vml_def.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_vml_def.so.1 ]; then patchelf --add-needed libmkl_core.so.1 libmkl_vml_def.so.1; fi"
+    COMMAND /bin/sh -c "if [ -f libmkl_intel_thread.so.1 ]; then patchelf --add-needed libmkl_intel_lp64.so.1 libmkl_intel_thread.so.1; fi"
     COMMAND podman rm pytorch_backend_ptlib
     COMMENT "Extracting pytorch and torchvision libraries and includes from ${TRITON_PYTORCH_DOCKER_IMAGE}"
     VERBATIM
@@ -570,6 +567,27 @@ if (${TRITON_ENABLE_ROCM} STREQUAL "OFF")
         endif()"
     )
   ENDFOREACH(plib)
+else()
+    install(
+	CODE
+	"EXECUTE_PROCESS(
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_gnu_thread.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_def.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_core.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_def.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_gnu_thread.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_avx2.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_core.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_avx2.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_gnu_thread.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_avx512.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_core.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_avx512.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_gnu_thread.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_vml_def.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_intel_thread.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_vml_def.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_core.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_vml_def.so.1
+	  COMMAND patchelf --add-needed ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_intel_lp64.so.1 ${DOCKER_IMAGE_BLAS_LIB_PATH}/libmkl_intel_thread.so.1
+	  RESULT_VARIABLE PATCHELF_STATUS
+          WORKING_DIRECTORY ${CMAKE_INSTALL_PREFIX}/backends/pytorch)
+        if(PATCHELF_STATUS AND NOT PATCHELF_STATUS EQUAL 0)
+          message(FATAL_ERROR \"FAILED: to run patchelf\")
+        endif()"
+
+	    )
 endif()
 endif() # TRITON_PYTORCH_DOCKER_BUILD
 
