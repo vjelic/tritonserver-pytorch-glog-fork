@@ -12,7 +12,7 @@
           "informationUri": "https://www.glog.ai",
           "rules": [
             {
-              "id": "glog-266453a9-80e3-49ee-bd30-bd31d4047683",
+              "id": "glog-0b62b7bd-17a5-4c71-a61a-7e7d75f7dd6b",
               "help": {
                 "text": ""
               },
@@ -34,7 +34,7 @@
       "language": "en-US",
       "results": [
         {
-          "ruleId": "glog-266453a9-80e3-49ee-bd30-bd31d4047683",
+          "ruleId": "glog-0b62b7bd-17a5-4c71-a61a-7e7d75f7dd6b",
           "kind": "fail",
           "level": "note",
           "message": {},
