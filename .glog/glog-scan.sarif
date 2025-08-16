@@ -12,9 +12,10 @@
           "informationUri": "https://www.glog.ai",
           "rules": [
             {
-              "id": "glog-0b62b7bd-17a5-4c71-a61a-7e7d75f7dd6b",
+              "id": "glog-e3378c7a-a8f1-47f0-8d68-ac0708a5c0c1",
               "help": {
-                "text": ""
+                "text": "",
+                "markdown": "## Description\n\nThe `strlen` function in C++ is used to find the length of a string. However, it can lead to vulnerabilities if not used properly. The function counts the number of characters in a string up to but not including the first null character. If the string does not have a null character, `strlen` will continue reading memory until it encounters one, which can lead to buffer overflows, memory corruption, and other security issues.\n\nIn the provided code snippet `strlen(\"TYPE_\")`, there is no direct vulnerability as the string is a constant and well-defined. However, if the string was replaced with a variable that could potentially not be null-terminated, it would pose a risk.\n\n## Mitigation Advice\n\nTo mitigate the risk of vulnerabilities associated with the `strlen` function:\n\n- Always ensure that strings are null-terminated.\n- Use safer alternatives to `strlen` when possible, such as `strnlen`, which takes a maximum length parameter and will not read past it.\n- Be cautious when using `strlen` in loops or with user-supplied input, as this can lead to denial of service attacks if the string is very long or does not contain a null character.\n\n## Source Code Fix Recommendation\n\nIn the provided code snippet, no fix is needed as the string is a constant. However, if the string was a variable, you could use `strnlen` to ensure that the function does not read past the end of the string:\n\n```cpp\n#include <string.h>\n\nchar str[] = \"TYPE_\";\nsize_t len = strnlen(str, sizeof(str));\n```\n\n## Library Dependencies\n\nThe `strlen` function is part of the C standard library, so no additional libraries are needed to use it.\n\n## References\n\n- [OWASP C++ Secure Coding Practices](https://cheatsheetseries.owasp.org/cheatsheets/C-Based_Toolchain_Hardening_Cheat_Sheet.html)\n- [CWE-126: Buffer Over-read](https://cwe.mitre.org/data/definitions/126.html)"
               },
               "properties": {
                 "tags": [
@@ -34,10 +35,12 @@
       "language": "en-US",
       "results": [
         {
-          "ruleId": "glog-0b62b7bd-17a5-4c71-a61a-7e7d75f7dd6b",
+          "ruleId": "glog-e3378c7a-a8f1-47f0-8d68-ac0708a5c0c1",
           "kind": "fail",
           "level": "note",
-          "message": {},
+          "message": {
+            "text": "Detected Vulnerability in C Function (strlen)"
+          },
           "locations": [
             {
               "physicalLocation": {
