@@ -12,18 +12,6 @@
           "informationUri": "https://www.glog.ai",
           "rules": [
             {
-              "id": "cb081d28-4ec5-37d2-bd2f-cff3f2a23b0b",
-              "help": {
-                "text": "",
-                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability in C++ refers to the use of insecure C library functions that can lead to various security issues such as buffer overflows, format string vulnerabilities, integer overflows, etc. In this case, the function `std::atoi()` is used, which does not check for errors and can lead to undefined behavior if the input string does not represent a valid integer.\n\n## Mitigation Advice\n\nAvoid using C library functions that do not perform error checking. Instead, use safer alternatives provided by the C++ Standard Library. For example, instead of `std::atoi()`, you can use `std::stoi()` which throws an exception if the conversion fails.\n\n## Source Code Fix Recommendation\n\nReplace `std::atoi()` with `std::stoi()` and handle the possible exceptions:\n\n```cpp\ntry {\n    ip_index = std::stoi(io_name.substr(start_pos + 2));\n} catch (const std::invalid_argument& ia) {\n    // Handle the exception\n} catch (const std::out_of_range& oor) {\n    // Handle the exception\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and its member functions.\n- `<cstdlib>`: for `std::atoi()`.\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`.\n\n## References\n\n- [CWE-242: Use of Inherently Dangerous Function](https://cwe.mitre.org/data/definitions/242.html)\n\nPlease note that the links are valid and active for anonymous users at the time of writing this report."
-              },
-              "properties": {
-                "tags": [
-                  "DS154189"
-                ]
-              }
-            },
-            {
               "id": "8ab07f0c-c792-3f08-bb65-26d4ad71bce7",
               "help": {
                 "text": "",
@@ -36,10 +24,10 @@
               }
             },
             {
-              "id": "72ecd950-d6af-3a1f-9a3a-cf7f5b7617ae",
+              "id": "3d25ddd6-5aa7-37e2-a97e-aeafa2abf4d2",
               "help": {
                 "text": "",
-                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability in C++ refers to the use of insecure C library functions that can lead to various security issues such as buffer overflows, format string vulnerabilities, integer overflows, etc. In this case, the `std::atoi` function is used, which does not check for errors, making it a potential source of vulnerabilities.\n\n## Mitigation Advice\n\nAvoid using C library functions that do not perform bounds checking or that do not provide mechanisms for error handling. Instead, use safer alternatives provided by the C++ Standard Library. In this case, you can use `std::stoi` instead of `std::atoi`.\n\n## Source Code Fix Recommendation\n\nReplace the `std::atoi` function with `std::stoi` function. The `std::stoi` function throws an exception if the conversion cannot be performed, which can be caught and handled appropriately.\n\n```cpp\ntry {\n    op_index = std::stoi(io_name.substr(start_pos + 2));\n} catch (std::invalid_argument const &e) {\n    // Handle the error, e.g., by logging it and returning from the function\n} catch (std::out_of_range const &e) {\n    // Handle the error\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and its member functions.\n- `<cstdlib>`: for `std::atoi`.\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`.\n\n## References\n\n- [OWASP C++](https://owasp.org/www-pdf-archive/OWASP_SCP_Quick_Reference_Guide_v2.pdf)\n- [CWE-242: Use of Inherently Dangerous Function](https://cwe.mitre.org/data/definitions/242.html)\n\nPlease note that the links are valid and active for anonymous users at the time of writing this report."
+                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability refers to the use of insecure C library functions in C++ code. These functions are often prone to buffer overflow attacks, format string vulnerabilities, integer overflow, etc. In this case, the function `std::atoi()` is used, which can lead to integer overflow if the input string represents a number larger than `INT_MAX`.\n\n## Mitigation Advice\n\nAvoid using C library functions that do not perform bounds checking or that are susceptible to integer overflow. Instead, use safer alternatives provided by the C++ Standard Library. For instance, instead of `std::atoi()`, consider using `std::stoi()`, which throws an exception if the conversion cannot be performed or if the converted value is out of the range of representable values for an int.\n\n## Source Code Fix Recommendation\n\nReplace the `std::atoi()` function with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    int state = std::stoi(state_name.substr(start_pos + 2));\n} catch (const std::invalid_argument& ia) {\n    // Handle the exception\n} catch (const std::out_of_range& oor) {\n    // Handle the exception\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and `std::stoi()`\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`\n\n## References\n\n- [CWE-190: Integer Overflow or Wraparound](https://cwe.mitre.org/data/definitions/190.html)\n\nPlease note that the links provided are accessible to anonymous users at the time of writing this report."
               },
               "properties": {
                 "tags": [
@@ -48,10 +36,10 @@
               }
             },
             {
-              "id": "9f6cb7eb-4ac3-3a7f-a3bf-ec5edae6fc97",
+              "id": "b01e1208-f709-3cd5-825c-644ccbdd9135",
               "help": {
                 "text": "",
-                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability in C++ refers to the use of certain C standard library functions that are known to be dangerous due to their potential to cause buffer overflows, format string vulnerabilities, or other problems. In this case, the function `std::atoi()` is used, which can lead to integer overflow or underflow if the input string represents a number outside the range of representable integer values.\n\n## Mitigation Advice\n\nAvoid using `std::atoi()`. Instead, use safer alternatives such as `std::stoi()`, `std::stol()`, or `std::stoll()`, which throw exceptions if the converted value would fall out of the range of the result type or if the underlying function reports an error.\n\n## Source Code Fix Recommendation\n\nReplace `std::atoi()` with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    ip_index = std::stoi(tensor_name.substr(start_pos + 2).c_str());\n} catch (const std::out_of_range& oor) {\n    // Handle out of range error\n} catch (const std::invalid_argument& ia) {\n    // Handle invalid argument error\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and its member functions.\n- `<cstdlib>`: for `std::atoi()`.\n- `<stdexcept>`: for `std::out_of_range` and `std::invalid_argument`.\n\n## References\n\n- [CWE-681: Incorrect Conversion between Numeric Types](https://cwe.mitre.org/data/definitions/681.html)\n\nPlease note that the links provided are accessible to anonymous users at the time of writing this report."
+                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability refers to the use of insecure C library functions in C++ code. These functions are often prone to buffer overflow attacks, format string vulnerabilities, or integer overflows. In this case, the function `std::atoi()` is used, which can lead to integer overflow if the input string represents a number larger than `INT_MAX`.\n\n## Mitigation Advice\n\nAvoid using C library functions that do not perform bounds checking or that are not safe from integer overflows. Instead, use safer alternatives provided by the C++ Standard Library. In this case, you can use `std::stoi()` instead of `std::atoi()`. `std::stoi()` throws an exception if the conversion cannot be performed or if the converted value is out of range, which makes it safer than `std::atoi()`.\n\n## Source Code Fix Recommendation\n\nReplace `std::atoi()` with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    int value = std::stoi(io_name.substr(start_pos + 2));\n} catch (const std::invalid_argument& ia) {\n    // Handle the exception\n} catch (const std::out_of_range& oor) {\n    // Handle the exception\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and `std::stoi()`\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`\n\n## References\n\n- [CWE-190: Integer Overflow or Wraparound](https://cwe.mitre.org/data/definitions/190.html)\n\nPlease note that the links provided are accessible to anonymous users at the time of writing this report."
               },
               "properties": {
                 "tags": [
@@ -60,10 +48,34 @@
               }
             },
             {
-              "id": "067cb077-6ca0-3c7d-b082-03e341287518",
+              "id": "2a4ba676-2f44-365f-920c-4ebab6a6c3b2",
               "help": {
                 "text": "",
-                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability in C++ refers to the use of certain C standard library functions that are known to be dangerous due to their potential to cause buffer overflows, format string vulnerabilities, or other problems. In this case, the function `std::atoi()` is used, which can lead to integer overflow or underflow if the input string represents a number outside the range of representable integer values.\n\n## Mitigation Advice\n\nAvoid using `std::atoi()`. Instead, use safer alternatives such as `std::stoi()`, `std::stol()`, or `std::stoll()`, which throw exceptions if the converted value would fall out of the range of the result type or if the underlying function reports an error.\n\n## Source Code Fix Recommendation\n\nReplace `std::atoi()` with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    ip_index = std::stoi(tensor_name.substr(start_pos + 2).c_str());\n} catch (const std::out_of_range& oor) {\n    // Handle out of range error\n} catch (const std::invalid_argument& ia) {\n    // Handle invalid argument error\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and its member functions.\n- `<cstdlib>`: for `std::atoi()`.\n- `<stdexcept>`: for `std::out_of_range` and `std::invalid_argument`.\n\n## References\n\n- [CWE-681: Incorrect Conversion between Numeric Types](https://cwe.mitre.org/data/definitions/681.html)\n\nPlease note that the links provided are accessible to anonymous users at the time of writing this report."
+                "markdown": "## Description\n\nThe \"Prohibited C Function Found\" vulnerability refers to the use of certain C standard library functions that are considered unsafe due to their potential to cause buffer overflows, format string vulnerabilities, or other types of security issues. In this case, the function `std::atoi()` is used, which can lead to integer overflow or underflow if the input string represents a number outside the range of representable integer values.\n\n## Mitigation Advice\n\nTo mitigate this vulnerability, it is recommended to use safer alternatives that perform bounds checking or error handling. In C++, this could be the `std::stoi()` function, which throws an exception if the conversion cannot be performed or if the converted value is out of range.\n\n## Source Code Fix Recommendation\n\nReplace the `std::atoi()` function with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    int value = std::stoi(io_name.substr(start_pos + 2));\n} catch (const std::invalid_argument& ia) {\n    // Handle the exception\n} catch (const std::out_of_range& oor) {\n    // Handle the exception\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and `std::stoi()`\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`\n\n## References\n\n- [CWE-681: Incorrect Conversion between Numeric Types](https://cwe.mitre.org/data/definitions/681.html)\n\nPlease note that the links provided are accessible to anonymous users at the time of writing this report."
+              },
+              "properties": {
+                "tags": [
+                  "DS154189"
+                ]
+              }
+            },
+            {
+              "id": "55b78578-b08d-3cc6-be36-729427ef3c24",
+              "help": {
+                "text": "",
+                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability refers to the use of insecure C library functions in C++ code. These functions are often prone to buffer overflow attacks, format string vulnerabilities, and integer overflow attacks. In this case, the `std::atoi()` function is used, which can lead to undefined behavior if the input string does not represent a valid integer.\n\n## Mitigation Advice\n\nTo mitigate this vulnerability, it is recommended to use safer alternatives to these functions. For C++, the `std::stoi()` function can be used as a safer alternative to `std::atoi()`. It throws an exception if the conversion cannot be performed, which can be caught and handled appropriately.\n\n## Source Code Fix Recommendation\n\nReplace the `std::atoi()` function with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    int tensor_name_int = std::stoi(tensor_name.substr(start_pos + 2));\n} catch (std::invalid_argument& e) {\n    // handle exception\n} catch (std::out_of_range& e) {\n    // handle exception\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and `std::stoi()`\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`\n\n## References\n\n- [CWE-242: Use of Inherently Dangerous Function](https://cwe.mitre.org/data/definitions/242.html)"
+              },
+              "properties": {
+                "tags": [
+                  "DS154189"
+                ]
+              }
+            },
+            {
+              "id": "2404786b-b262-3d20-a56b-266e5b1f021a",
+              "help": {
+                "text": "",
+                "markdown": "## Description\n\n\"Detected Prohibited C Function\" vulnerability refers to the use of insecure C library functions in C++ code. These functions are often prone to buffer overflow attacks, format string vulnerabilities, and integer overflow attacks. In this case, the `std::atoi()` function is used, which can lead to undefined behavior if the input string does not represent a valid integer.\n\n## Mitigation Advice\n\nTo mitigate this vulnerability, it is recommended to use safer alternatives to these functions. For C++, the `std::stoi()` function can be used as a safer alternative to `std::atoi()`. It throws an exception if the conversion cannot be performed, which can be caught and handled appropriately.\n\n## Source Code Fix Recommendation\n\nReplace the `std::atoi()` function with `std::stoi()`. Here is the fixed code:\n\n```cpp\ntry {\n    int tensor_name_int = std::stoi(tensor_name.substr(start_pos + 2));\n} catch (std::invalid_argument& e) {\n    // handle exception\n} catch (std::out_of_range& e) {\n    // handle exception\n}\n```\n\n## Library Dependencies\n\nThe code example requires the following library dependencies:\n\n- `<string>`: for `std::string` and `std::stoi()`\n- `<stdexcept>`: for `std::invalid_argument` and `std::out_of_range`\n\n## References\n\n- [CWE-242: Use of Inherently Dangerous Function](https://cwe.mitre.org/data/definitions/242.html)"
               },
               "properties": {
                 "tags": [
@@ -82,46 +94,6 @@
       },
       "language": "en-US",
       "results": [
-        {
-          "ruleId": "d8f1ea46-c7fc-310b-b0fe-ec2fbe035f46",
-          "kind": "fail",
-          "level": "warning",
-          "message": {
-            "text": "Detected Prohibited C Function"
-          },
-          "locations": [
-            {
-              "physicalLocation": {
-                "artifactLocation": {
-                  "uri": "src/libtorch.cc"
-                },
-                "region": {
-                  "startLine": 1230,
-                  "startColumn": 24,
-                  "endLine": 1230,
-                  "endColumn": 28,
-                  "charOffset": 44724,
-                  "charLength": 4,
-                  "snippet": {
-                    "text": "atoi",
-                    "rendered": {
-                      "text": "atoi",
-                      "markdown": "`atoi`"
-                    }
-                  },
-                  "sourceLanguage": "cpp"
-                }
-              }
-            }
-          ],
-          "properties": {
-            "DevSkimSeverity": "Moderate",
-            "DevSkimConfidence": "High",
-            "tags": [
-              "API.DangerousAPI.BannedFunction"
-            ]
-          }
-        },
         {
           "ruleId": "8ab07f0c-c792-3f08-bb65-26d4ad71bce7",
           "kind": "fail",
@@ -211,7 +183,7 @@
           }
         },
         {
-          "ruleId": "cb081d28-4ec5-37d2-bd2f-cff3f2a23b0b",
+          "ruleId": "3d25ddd6-5aa7-37e2-a97e-aeafa2abf4d2",
           "kind": "fail",
           "level": "warning",
           "message": {
@@ -224,11 +196,11 @@
                   "uri": "src/libtorch.cc"
                 },
                 "region": {
-                  "startLine": 947,
-                  "startColumn": 28,
-                  "endLine": 947,
-                  "endColumn": 32,
-                  "charOffset": 34058,
+                  "startLine": 1230,
+                  "startColumn": 24,
+                  "endLine": 1230,
+                  "endColumn": 28,
+                  "charOffset": 44724,
                   "charLength": 4,
                   "snippet": {
                     "text": "atoi",
@@ -251,7 +223,7 @@
           }
         },
         {
-          "ruleId": "72ecd950-d6af-3a1f-9a3a-cf7f5b7617ae",
+          "ruleId": "b01e1208-f709-3cd5-825c-644ccbdd9135",
           "kind": "fail",
           "level": "warning",
           "message": {
@@ -291,7 +263,47 @@
           }
         },
         {
-          "ruleId": "9f6cb7eb-4ac3-3a7f-a3bf-ec5edae6fc97",
+          "ruleId": "2a4ba676-2f44-365f-920c-4ebab6a6c3b2",
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Detected Prohibited C Function"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/libtorch.cc"
+                },
+                "region": {
+                  "startLine": 947,
+                  "startColumn": 28,
+                  "endLine": 947,
+                  "endColumn": 32,
+                  "charOffset": 34058,
+                  "charLength": 4,
+                  "snippet": {
+                    "text": "atoi",
+                    "rendered": {
+                      "text": "atoi",
+                      "markdown": "`atoi`"
+                    }
+                  },
+                  "sourceLanguage": "cpp"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "DevSkimSeverity": "Moderate",
+            "DevSkimConfidence": "High",
+            "tags": [
+              "API.DangerousAPI.BannedFunction"
+            ]
+          }
+        },
+        {
+          "ruleId": "55b78578-b08d-3cc6-be36-729427ef3c24",
           "kind": "fail",
           "level": "warning",
           "message": {
@@ -331,7 +343,7 @@
           }
         },
         {
-          "ruleId": "067cb077-6ca0-3c7d-b082-03e341287518",
+          "ruleId": "2404786b-b262-3d20-a56b-266e5b1f021a",
           "kind": "fail",
           "level": "warning",
           "message": {
